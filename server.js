@@ -8,50 +8,82 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from public directory
 app.use(express.static('public'));
 
-// API endpoint to get countdown data
+/**
+ * API endpoint to get countdown data
+ * Now supports multiple countdowns via comma-separated env variables:
+ * TARGET_DATETIMES and COUNTDOWN_TITLES
+ */
 app.get('/api/countdown', (req, res) => {
   try {
-    const targetDateTime = process.env.TARGET_DATETIME;
-    const title = process.env.COUNTDOWN_TITLE || 'Countdown';
+    const targetDateTimes = (process.env.TARGET_DATETIMES || process.env.TARGET_DATETIME || '').split(',').map(s => s.trim()).filter(Boolean);
+    const titles = (process.env.COUNTDOWN_TITLES || process.env.COUNTDOWN_TITLE || '').split(',').map(s => s.trim());
     
-    if (!targetDateTime) {
-      return res.status(500).json({ 
-        error: 'TARGET_DATETIME not configured in environment variables' 
+
+    if (!targetDateTimes.length) {
+      return res.status(500).json({
+        error: 'TARGET_DATETIMES (or TARGET_DATETIME) not configured in environment variables'
       });
     }
 
-    const target = new Date(targetDateTime);
     const now = new Date();
-    
-    if (isNaN(target.getTime())) {
-      return res.status(500).json({ 
-        error: 'Invalid TARGET_DATETIME format. Use ISO 8601 format (e.g., 2024-12-31T23:59:59Z)' 
-      });
-    }
+    let countdowns = targetDateTimes.map((targetDateTime, i) => {
+      const title = titles[i] || `Countdown ${i + 1}`;
+      const target = new Date(targetDateTime);
 
-    const diffMs = target.getTime() - now.getTime();
-    const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
-    
-    // Calculate days, hours, minutes, seconds for more detailed display
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+      if (isNaN(target.getTime())) {
+        return {
+          title,
+          targetDateTime,
+          error: 'Invalid date format. Use ISO 8601 format (e.g., 2024-12-31T23:59:59Z)'
+        };
+      }
 
-    res.json({
-      title,
-      targetDateTime: target.toISOString(),
-      totalHours: Math.max(0, diffHours),
-      timeRemaining: {
-        days: Math.max(0, days),
-        hours: Math.max(0, hours),
-        minutes: Math.max(0, minutes),
-        seconds: Math.max(0, seconds)
-      },
-      isComplete: diffMs <= 0
+      const diffMs = target.getTime() - now.getTime();
+      const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+      return {
+        title,
+        targetDateTime: target.toISOString(),
+        totalHours: Math.max(0, diffHours),
+        timeRemaining: {
+          days: Math.max(0, days),
+          hours: Math.max(0, hours),
+          minutes: Math.max(0, minutes),
+          seconds: Math.max(0, seconds)
+        },
+        isComplete: diffMs <= 0,
+        _diffMs: diffMs,
+        _targetTime: target.getTime()
+      };
     });
+
+    // Sort: completed first (most recently completed first), then uncompleted (soonest first)
+    countdowns = countdowns.sort((a, b) => {
+      if (a.isComplete && b.isComplete) {
+        // Most recently completed first (largest _targetTime first)
+        return b._targetTime - a._targetTime;
+      }
+      if (!a.isComplete && !b.isComplete) {
+        // Soonest to be achieved first (smallest _diffMs first)
+        return a._diffMs - b._diffMs;
+      }
+      // Completed before uncompleted
+      return a.isComplete ? -1 : 1;
+    });
+
+    // Remove internal fields before sending
+    countdowns = countdowns.map(cd => {
+      const { _diffMs, _targetTime, ...rest } = cd;
+      return rest;
+    });
+
+    res.json({ countdowns });
   } catch (error) {
-    res.status(500).json({ error: 'Server error calculating countdown' });
+    res.status(500).json({ error: 'Server error calculating countdowns' });
   }
 });
 
@@ -63,4 +95,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Countdown website running on port ${PORT}`);
   console.log(`Visit http://localhost:${PORT} to view the countdown`);
-}); 
+});

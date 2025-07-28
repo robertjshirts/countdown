@@ -1,18 +1,18 @@
-class CountdownTimer {
+class CountdownList {
     constructor() {
-        this.interval = null;
+        this.timers = [];
         this.init();
     }
 
-    init() {
-        this.updateCountdown();
+    async init() {
+        await this.fetchAndRenderCountdowns();
         // Update every second
         this.interval = setInterval(() => {
-            this.updateCountdown();
+            this.updateCountdowns();
         }, 1000);
     }
 
-    async updateCountdown() {
+    async fetchAndRenderCountdowns() {
         try {
             const response = await fetch('/api/countdown');
             const data = await response.json();
@@ -21,64 +21,169 @@ class CountdownTimer {
                 throw new Error(data.error || 'Failed to fetch countdown data');
             }
 
-            this.renderCountdown(data);
+            this.renderCountdowns(data.countdowns || []);
         } catch (error) {
             this.renderError(error.message);
         }
     }
 
-    renderCountdown(data) {
-        // Hide error message if it was showing
-        document.getElementById('error-message').style.display = 'none';
+    renderCountdowns(countdowns) {
+        const listContainer = document.getElementById('countdown-list');
+        listContainer.innerHTML = '';
 
-        // Update title
-        document.getElementById('countdown-title').textContent = data.title;
+        if (!Array.isArray(countdowns) || countdowns.length === 0) {
+            this.renderError('No countdowns configured.');
+            return;
+        }
 
-        // Update target date
-        const targetDate = new Date(data.targetDateTime);
-        document.getElementById('target-datetime').textContent = 
-            targetDate.toLocaleString();
+        this.timers = countdowns.map((cd, idx) => {
+            const card = document.createElement('div');
+            card.className = 'countdown-card';
 
-        if (data.isComplete) {
-            // Show completion message
-            document.getElementById('time-display').style.display = 'none';
-            document.getElementById('total-hours').style.display = 'none';
-            document.getElementById('completed-message').style.display = 'block';
-            
-            // Stop the interval
-            if (this.interval) {
-                clearInterval(this.interval);
-                this.interval = null;
+            // Title (link to target if valid date)
+            const titleEl = document.createElement('h1');
+            titleEl.className = 'countdown-title';
+            titleEl.textContent = cd.title || `Countdown ${idx + 1}`;
+            card.appendChild(titleEl);
+
+            // Target date
+            const targetDate = new Date(cd.targetDateTime);
+            const targetDateEl = document.createElement('div');
+            targetDateEl.className = 'target-date';
+            targetDateEl.innerHTML = `Target: <span class="target-datetime">${isNaN(targetDate.getTime()) ? 'Invalid date' : targetDate.toLocaleString()}</span>`;
+            card.appendChild(targetDateEl);
+
+            // Time display
+            const timeDisplay = document.createElement('div');
+            timeDisplay.className = 'time-display';
+            timeDisplay.style.display = cd.isComplete ? 'none' : 'grid';
+
+            // Time units
+            ['days', 'hours', 'minutes', 'seconds'].forEach(unit => {
+                const unitDiv = document.createElement('div');
+                unitDiv.className = 'time-unit';
+
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'time-value';
+                valueSpan.classList.add(`cd-${unit}-${idx}`);
+                valueSpan.textContent = cd.timeRemaining ? cd.timeRemaining[unit] : '--';
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'time-label';
+                labelSpan.textContent = unit.charAt(0).toUpperCase() + unit.slice(1);
+
+                unitDiv.appendChild(valueSpan);
+                unitDiv.appendChild(labelSpan);
+                timeDisplay.appendChild(unitDiv);
+            });
+            card.appendChild(timeDisplay);
+
+            // Total hours
+            const totalHoursDiv = document.createElement('div');
+            totalHoursDiv.className = 'total-hours';
+            totalHoursDiv.style.display = cd.isComplete ? 'none' : 'flex';
+
+            const hoursNumber = document.createElement('span');
+            hoursNumber.className = `hours-number cd-hours-number-${idx}`;
+            hoursNumber.textContent = cd.totalHours !== undefined ? cd.totalHours : '--';
+
+            const hoursLabel = document.createElement('span');
+            hoursLabel.className = 'hours-label';
+            hoursLabel.textContent = 'Total Hours Remaining';
+
+            totalHoursDiv.appendChild(hoursNumber);
+            totalHoursDiv.appendChild(hoursLabel);
+            card.appendChild(totalHoursDiv);
+
+            // Completed message
+            const completedMsg = document.createElement('div');
+            completedMsg.className = 'completed-message';
+            completedMsg.style.display = cd.isComplete ? 'block' : 'none';
+            completedMsg.textContent = '🎉 Countdown Complete! 🎉';
+            card.appendChild(completedMsg);
+
+            // Error message (if any)
+            if (cd.error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `<p>${cd.error}</p>`;
+                card.appendChild(errorDiv);
             }
-        } else {
-            // Show countdown
-            document.getElementById('time-display').style.display = 'grid';
-            document.getElementById('total-hours').style.display = 'flex';
-            document.getElementById('completed-message').style.display = 'none';
 
-            // Update time units
-            document.getElementById('days').textContent = data.timeRemaining.days;
-            document.getElementById('hours').textContent = data.timeRemaining.hours;
-            document.getElementById('minutes').textContent = data.timeRemaining.minutes;
-            document.getElementById('seconds').textContent = data.timeRemaining.seconds;
+            listContainer.appendChild(card);
 
-            // Update total hours
-            document.querySelector('.hours-number').textContent = data.totalHours;
+            // Return timer state for updating
+            return {
+                idx,
+                isComplete: cd.isComplete,
+                targetDateTime: cd.targetDateTime,
+                card,
+                completedMsg,
+                timeDisplay,
+                totalHoursDiv,
+                hoursNumber,
+                timeUnits: {
+                    days: card.querySelector(`.cd-days-${idx}`),
+                    hours: card.querySelector(`.cd-hours-${idx}`),
+                    minutes: card.querySelector(`.cd-minutes-${idx}`),
+                    seconds: card.querySelector(`.cd-seconds-${idx}`)
+                }
+            };
+        });
+    }
+
+    async updateCountdowns() {
+        try {
+            const response = await fetch('/api/countdown');
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch countdown data');
+            }
+
+            const countdowns = data.countdowns || [];
+            countdowns.forEach((cd, idx) => {
+                const timer = this.timers[idx];
+                if (!timer) return;
+
+                // Update time units
+                if (cd.timeRemaining) {
+                    timer.timeUnits.days.textContent = cd.timeRemaining.days;
+                    timer.timeUnits.hours.textContent = cd.timeRemaining.hours;
+                    timer.timeUnits.minutes.textContent = cd.timeRemaining.minutes;
+                    timer.timeUnits.seconds.textContent = cd.timeRemaining.seconds;
+                }
+
+                // Update total hours
+                timer.hoursNumber.textContent = cd.totalHours !== undefined ? cd.totalHours : '--';
+
+                // Show/hide completed message and time display
+                if (cd.isComplete && !timer.isComplete) {
+                    timer.timeDisplay.style.display = 'none';
+                    timer.totalHoursDiv.style.display = 'none';
+                    timer.completedMsg.style.display = 'block';
+                    timer.isComplete = true;
+                } else if (!cd.isComplete && timer.isComplete) {
+                    timer.timeDisplay.style.display = 'grid';
+                    timer.totalHoursDiv.style.display = 'flex';
+                    timer.completedMsg.style.display = 'none';
+                    timer.isComplete = false;
+                }
+            });
+        } catch (error) {
+            this.renderError(error.message);
         }
     }
 
     renderError(errorMessage) {
-        // Hide countdown elements
-        document.getElementById('time-display').style.display = 'none';
-        document.getElementById('total-hours').style.display = 'none';
-        document.getElementById('completed-message').style.display = 'none';
-        
-        // Show error message
-        document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-details').textContent = errorMessage;
-        
-        // Update title to show error state
-        document.getElementById('countdown-title').textContent = 'Configuration Error';
+        const listContainer = document.getElementById('countdown-list');
+        listContainer.innerHTML = `
+            <div class="error-message" style="display: block;">
+                <p>Unable to load countdown data.</p>
+                <p>${errorMessage}</p>
+            </div>
+        `;
     }
 
     destroy() {
@@ -89,14 +194,14 @@ class CountdownTimer {
     }
 }
 
-// Initialize countdown timer when page loads
+// Initialize countdown list when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new CountdownTimer();
+    window.countdownList = new CountdownList();
 });
 
 // Clean up interval when page is unloaded
 window.addEventListener('beforeunload', () => {
-    if (window.countdownTimer) {
-        window.countdownTimer.destroy();
+    if (window.countdownList) {
+        window.countdownList.destroy();
     }
-}); 
+});

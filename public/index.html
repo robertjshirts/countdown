@@ -8,48 +8,9 @@
 </head>
 <body>
     <div class="container">
-        <div class="countdown-card">
-            <h1 id="countdown-title">Loading...</h1>
-            
-            <div class="time-display" id="time-display">
-                <div class="time-unit">
-                    <span class="time-value" id="days">--</span>
-                    <span class="time-label">Days</span>
-                </div>
-                <div class="time-unit">
-                    <span class="time-value" id="hours">--</span>
-                    <span class="time-label">Hours</span>
-                </div>
-                <div class="time-unit">
-                    <span class="time-value" id="minutes">--</span>
-                    <span class="time-label">Minutes</span>
-                </div>
-                <div class="time-unit">
-                    <span class="time-value" id="seconds">--</span>
-                    <span class="time-label">Seconds</span>
-                </div>
-            </div>
-            
-            <div class="total-hours" id="total-hours">
-                <span class="hours-number">--</span>
-                <span class="hours-label">Total Hours Remaining</span>
-            </div>
-            
-            <div class="target-date" id="target-date">
-                Target: <span id="target-datetime">Loading...</span>
-            </div>
-            
-            <div class="completed-message" id="completed-message" style="display: none;">
-                🎉 Countdown Complete! 🎉
-            </div>
-            
-            <div class="error-message" id="error-message" style="display: none;">
-                <p>Unable to load countdown data.</p>
-                <p id="error-details"></p>
-            </div>
-        </div>
+        <div id="countdown-list"></div>
     </div>
     
     <script src="script.js"></script>
 </body>
-</html> 
+</html>

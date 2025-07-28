@@ -21,6 +21,8 @@ body {
 }
 
 .countdown-card {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
     background: rgba(30, 30, 30, 0.95);
     backdrop-filter: blur(10px);
     border-radius: 20px;
@@ -219,4 +221,4 @@ h1 {
     .hours-label {
         font-size: 1rem;
     }
-} 
+}
